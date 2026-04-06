@@ -1,0 +1,18 @@
+[project]
+name = "vortex_lexicon"
+version = "0.1.0"
+description = "vortex_lexicon"
+readme = "README.md"
+requires-python = ">=3.9, <4.0"
+dependencies = [
+    "nonebot-plugin-alconna>=0.59.4",
+    "nonebot-plugin-orm[sqlite]>=0.8.3",
+]
+
+[tool.nonebot]
+adapters = [
+    { name = "nonebot-adapter-milky", module_name = "nonebot.adapters.milky" }
+]
+plugins = ["nonebot_plugin_vortex_lexicon"]
+plugin_dirs = []
+builtin_plugins = []

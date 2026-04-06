@@ -1,0 +1,29 @@
+import re
+
+_VAR_TOKEN_RE = re.compile(r"\[([^\[\]]+)\]")
+
+_OP_OR = "OR"
+_OP_AND = "AND"
+_OP_NOT = "NOT"
+_OP_XOR = "XOR"
+_OP_IN = "IN"
+_OP_NOT_IN = "NOT_IN"
+
+_OP_ALIASES: dict[str, set[str]] = {
+    _OP_OR: {"or", "或者", "或", "||"},
+    _OP_AND: {"and", "并且", "且", "同时", "&&", "&"},
+    _OP_NOT: {"not", "非", "不是", "!"},
+    _OP_XOR: {"xor", "异或"},
+    _OP_IN: {"in", "包含", "contains"},
+    _OP_NOT_IN: {"not in", "notin", "不包含"},
+}
+
+_RANDOM_NAME_ALIASES = {"随机操作"}
+_RANDOM_CHOICE_ALIASES = {"从列表"}
+_RANDOM_NUMBER_ALIASES = {"取随机数"}
+
+_INT_RE = re.compile(r"^-?\d+$")
+_DEFAULT_RANDOM_MIN = 0
+_DEFAULT_RANDOM_MAX = 100
+_LEGACY_RANDOM_EXPR_RE = re.compile(r"^(?:随机操作)\s*\([^()]*\)$", re.IGNORECASE)
+_ASSIGN_VAR_RE = re.compile(r"^[^\W\d]\w*$", re.UNICODE)
