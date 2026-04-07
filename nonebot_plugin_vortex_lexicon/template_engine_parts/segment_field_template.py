@@ -112,6 +112,14 @@ def _missing_value_target_message(seg_type: str, expr: str) -> str:
 
 
 def parse_segment_field_expression(expr: str) -> tuple[str, str] | None:
+    """解析消息段字段模板。
+    Args:
+        expr: 表达式字符串
+    用法：
+    ```python
+    parsed = parse_segment_field_expression("at.user_id")
+    ```
+    """
     parts = [part.strip() for part in expr.split(".") if part.strip()]
     if len(parts) < 1:
         return None
@@ -126,6 +134,15 @@ def parse_segment_field_expression(expr: str) -> tuple[str, str] | None:
 
 
 def eval_segment_field_expression(event: Event, expr: str) -> str | None:
+    """读取事件中的消息段字段值。
+    Args:
+        event: 当前事件对象
+        expr: 表达式字符串
+    用法：
+    ```python
+    value = eval_segment_field_expression(event, "image.file_id")
+    ```
+    """
     parsed = parse_segment_field_expression(expr)
     if parsed is None:
         return None
@@ -150,6 +167,15 @@ def eval_segment_field_expression(event: Event, expr: str) -> str | None:
 
 
 def render_segment_field_template(event: Event, text: str) -> str:
+    """渲染文本中的消息段字段模板。
+    Args:
+        event: 当前事件对象
+        text: 待处理文本
+    用法：
+    ```python
+    result = render_segment_field_template(event, "QQ是[at.user_id]")
+    ```
+    """
     if "[" not in text or "]" not in text:
         return text
 

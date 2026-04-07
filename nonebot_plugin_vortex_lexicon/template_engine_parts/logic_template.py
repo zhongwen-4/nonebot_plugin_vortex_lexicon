@@ -32,6 +32,14 @@ def _normalize_op_name(name: str) -> str | None:
 
 @lru_cache(maxsize=1024)
 def tokenize_logic_expression(template: str) -> tuple[tuple[str, str], ...]:
+    """把逻辑模板拆成原子和操作符。
+    Args:
+        template: 模板字符串
+    用法：
+    ```python
+    tokens = tokenize_logic_expression("你好[or]世界")
+    ```
+    """
     raw_tokens: list[tuple[str, str]] = []
     cursor = 0
 
@@ -74,10 +82,26 @@ def tokenize_logic_expression(template: str) -> tuple[tuple[str, str], ...]:
 
 
 def has_logic_ops(tokens: tuple[tuple[str, str], ...]) -> bool:
+    """判断 token 列表中是否存在逻辑操作符。
+    Args:
+        tokens: 逻辑 token 序列
+    用法：
+    ```python
+    ok = has_logic_ops(tokenize_logic_expression("你好[or]世界"))
+    ```
+    """
     return any(kind == "op" for kind, _ in tokens)
 
 
 def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
+    """把逻辑 token 解析为语法树。
+    Args:
+        tokens: 逻辑 token 序列
+    用法：
+    ```python
+    ast = parse_logic_expression(tokenize_logic_expression("你好[or]世界"))
+    ```
+    """
     idx = 0
 
     def parse_or() -> tuple | None:
@@ -169,6 +193,17 @@ def eval_logic(
     contains_fallback: bool = False,
     event: Event | None = None,
 ) -> dict[str, str] | None:
+    """执行问题侧逻辑匹配。
+    Args:
+        node: 逻辑语法树节点
+        text: 待处理文本
+        contains_fallback: 是否启用包含匹配回退
+        event: 当前事件对象
+    用法：
+    ```python
+    matched = eval_logic(ast, "你好", False, event)
+    ```
+    """
     op = node[0]
     if op == "ATOM":
         matched = match_atom_with_event(node[1], text, event)
@@ -241,6 +276,18 @@ def eval_logic_output(
     contains_fallback: bool = False,
     event: Event | None = None,
 ) -> str | None:
+    """执行答案侧逻辑渲染。
+    Args:
+        node: 逻辑语法树节点
+        text: 待处理文本
+        base_variables: 基础变量字典
+        contains_fallback: 是否启用包含匹配回退
+        event: 当前事件对象
+    用法：
+    ```python
+    result = eval_logic_output(ast, "你好", {}, False, event)
+    ```
+    """
     op = node[0]
     if op == "ATOM":
         atom_template = node[1]
@@ -319,20 +366,65 @@ def eval_logic_output(
 class LogicTemplate:
     @staticmethod
     def tokenize(template: str) -> tuple[tuple[str, str], ...]:
+        """拆分逻辑模板 token。
+        Args:
+            template: 模板字符串
+        用法：
+        ```python
+        tokens = LogicTemplate.tokenize("你好[or]世界")
+        ```
+        """
         return tokenize_logic_expression(template)
 
     @staticmethod
     def has_ops(tokens: tuple[tuple[str, str], ...]) -> bool:
+        """判断是否存在逻辑操作符。
+        Args:
+            tokens: 逻辑 token 序列
+        用法：
+        ```python
+        ok = LogicTemplate.has_ops(tokens)
+        ```
+        """
         return has_logic_ops(tokens)
 
     @staticmethod
     def parse(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
+        """解析逻辑模板语法树。
+        Args:
+            tokens: 逻辑 token 序列
+        用法：
+        ```python
+        ast = LogicTemplate.parse(tokens)
+        ```
+        """
         return parse_logic_expression(tokens)
 
     @staticmethod
     def eval_question(ast: tuple, text: str, event: Event | None = None) -> dict[str, str] | None:
+        """执行问题侧逻辑计算。
+        Args:
+            ast: 逻辑语法树
+            text: 待处理文本
+            event: 当前事件对象
+        用法：
+        ```python
+        matched = LogicTemplate.eval_question(ast, "你好", event)
+        ```
+        """
         return eval_logic(ast, text, False, event)
 
     @staticmethod
     def eval_answer(ast: tuple, text: str, variables: dict[str, str], event: Event | None = None) -> str | None:
+        """执行答案侧逻辑计算。
+        Args:
+            ast: 逻辑语法树
+            text: 待处理文本
+            variables: 模板变量字典
+            event: 当前事件对象
+        用法：
+        ```python
+        result = LogicTemplate.eval_answer(ast, "你好", {}, event)
+        ```
+        """
         return eval_logic_output(ast, text, variables, False, event)

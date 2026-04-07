@@ -42,6 +42,14 @@ def is_deprecated_random_token(name: str) -> bool:
 
 @lru_cache(maxsize=1024)
 def compile_question_template(template: str) -> tuple[tuple[str, str], ...]:
+    """编译问题模板为匹配 token。
+    Args:
+        template: 模板字符串
+    用法：
+    ```python
+    tokens = compile_question_template("你好[name]")
+    ```
+    """
     tokens: list[tuple[str, str]] = []
     cursor = 0
 
@@ -212,16 +220,44 @@ def _match_template(
 
 
 def match_atom(atom_template: str, text: str) -> dict[str, str] | None:
+    """按原子模板精确匹配文本。
+    Args:
+        atom_template: 原子模板字符串
+        text: 待处理文本
+    用法：
+    ```python
+    matched = match_atom("你好[name]", "你好世界")
+    ```
+    """
     tokens = compile_question_template(atom_template)
     return _match_template(tokens, text)
 
 
 def match_atom_with_event(atom_template: str, text: str, event: Event | None = None) -> dict[str, str] | None:
+    """按原子模板结合事件上下文匹配文本。
+    Args:
+        atom_template: 原子模板字符串
+        text: 待处理文本
+        event: 当前事件对象
+    用法：
+    ```python
+    matched = match_atom_with_event("[uid=at.user_id]", "@某人", event)
+    ```
+    """
     tokens = compile_question_template(atom_template)
     return _match_template(tokens, text, event)
 
 
 def contains_atom(atom_template: str, text: str) -> dict[str, str] | None:
+    """判断文本是否包含原子模板。
+    Args:
+        atom_template: 原子模板字符串
+        text: 待处理文本
+    用法：
+    ```python
+    matched = contains_atom("世界", "你好世界")
+    ```
+    """
     atom_template = atom_template.strip()
     if not atom_template:
         return {}
@@ -238,6 +274,16 @@ def contains_atom(atom_template: str, text: str) -> dict[str, str] | None:
 
 
 def contains_atom_with_event(atom_template: str, text: str, event: Event | None = None) -> dict[str, str] | None:
+    """结合事件上下文判断文本是否包含原子模板。
+    Args:
+        atom_template: 原子模板字符串
+        text: 待处理文本
+        event: 当前事件对象
+    用法：
+    ```python
+    matched = contains_atom_with_event("[uid=at.user_id]", "测试@某人", event)
+    ```
+    """
     atom_template = atom_template.strip()
     if not atom_template:
         return {}
@@ -254,6 +300,15 @@ def contains_atom_with_event(atom_template: str, text: str, event: Event | None 
 
 
 def merge_vars(left: dict[str, str], right: dict[str, str]) -> dict[str, str] | None:
+    """合并两组模板变量。
+    Args:
+        left: 左侧变量字典
+        right: 右侧变量字典
+    用法：
+    ```python
+    merged = merge_vars({"a": "1"}, {"b": "2"})
+    ```
+    """
     merged = dict(left)
     for key, value in right.items():
         existed = merged.get(key)
@@ -266,20 +321,66 @@ def merge_vars(left: dict[str, str], right: dict[str, str]) -> dict[str, str] | 
 class QuestionTemplate:
     @staticmethod
     def compile(template: str) -> tuple[tuple[str, str], ...]:
+        """编译问题模板。
+        Args:
+            template: 模板字符串
+        用法：
+        ```python
+        tokens = QuestionTemplate.compile("你好[name]")
+        ```
+        """
         return compile_question_template(template)
 
     @staticmethod
     def match(template: str, text: str) -> dict[str, str] | None:
+        """精确匹配问题模板。
+        Args:
+            template: 模板字符串
+            text: 待处理文本
+        用法：
+        ```python
+        matched = QuestionTemplate.match("你好[name]", "你好世界")
+        ```
+        """
         return match_atom(template, text)
 
     @staticmethod
     def match_with_event(template: str, text: str, event: Event | None = None) -> dict[str, str] | None:
+        """结合事件上下文匹配问题模板。
+        Args:
+            template: 模板字符串
+            text: 待处理文本
+            event: 当前事件对象
+        用法：
+        ```python
+        matched = QuestionTemplate.match_with_event("[uid=at.user_id]", "@某人", event)
+        ```
+        """
         return match_atom_with_event(template, text, event)
 
     @staticmethod
     def contains(template: str, text: str) -> dict[str, str] | None:
+        """判断文本是否包含问题模板。
+        Args:
+            template: 模板字符串
+            text: 待处理文本
+        用法：
+        ```python
+        matched = QuestionTemplate.contains("世界", "你好世界")
+        ```
+        """
         return contains_atom(template, text)
 
     @staticmethod
     def contains_with_event(template: str, text: str, event: Event | None = None) -> dict[str, str] | None:
+        """结合事件上下文判断文本是否包含问题模板。
+        Args:
+            template: 模板字符串
+            text: 待处理文本
+            event: 当前事件对象
+        用法：
+        ```python
+        matched = QuestionTemplate.contains_with_event("[uid=at.user_id]", "测试@某人", event)
+        ```
+        """
         return contains_atom_with_event(template, text, event)

@@ -77,6 +77,14 @@ def _coerce_value(raw: str) -> Any:
 def parse_api_action(
     answer_text: str,
 ) -> tuple[str, dict[str, Any], list[str], str] | None:
+    """解析答案中的 API 调用模板。
+    Args:
+        answer_text: 答案模板原文
+    用法：
+    ```python
+    parsed = parse_api_action("[api.get_group_member_info.group_id=123.user_id=456]")
+    ```
+    """
     matched = _API_BLOCK_RE.match(answer_text)
     if matched is None:
         return None
@@ -130,6 +138,16 @@ def parse_api_action(
 
 
 async def run_api_action(bot: Bot, event: Event, answer_text: str) -> str:
+    """执行答案中的 API 调用模板。
+    Args:
+        bot: 当前 Bot 实例
+        event: 当前事件对象
+        answer_text: 答案模板原文
+    用法：
+    ```python
+    text = await run_api_action(bot, event, "[api.xxx]后续文本")
+    ```
+    """
     parsed = parse_api_action(answer_text)
     if parsed is None:
         return answer_text

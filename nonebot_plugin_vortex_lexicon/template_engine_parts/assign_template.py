@@ -17,6 +17,14 @@ from .time_template import parse_time_spec, render_time_value
 
 
 def parse_question_assign_spec(name: str) -> tuple[str, str] | None:
+    """解析问题模板中的赋值表达式。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    spec = parse_question_assign_spec("num=随机操作.取随机数.1.10")
+    ```
+    """
     if "=" not in name:
         return None
     left, right = name.split("=", 1)
@@ -34,6 +42,14 @@ def parse_question_assign_spec(name: str) -> tuple[str, str] | None:
 
 
 def parse_answer_assign_spec(name: str) -> tuple[str, str] | None:
+    """解析答案模板中的赋值表达式。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    spec = parse_answer_assign_spec("msg=时间.取时间戳_秒")
+    ```
+    """
     if "=" not in name:
         return None
     left, right = name.split("=", 1)
@@ -47,6 +63,15 @@ def parse_answer_assign_spec(name: str) -> tuple[str, str] | None:
 
 
 def eval_question_assign_expression(expr: str, event: Event | None = None) -> str | None:
+    """计算问题模板赋值表达式的结果。
+    Args:
+        expr: 表达式字符串
+        event: 当前事件对象
+    用法：
+    ```python
+    value = eval_question_assign_expression("时间.取时间戳_秒", event)
+    ```
+    """
     random_number = render_random_number(expr)
     if random_number is not None:
         return random_number
@@ -61,6 +86,15 @@ def eval_question_assign_expression(expr: str, event: Event | None = None) -> st
 
 
 def eval_answer_assign_expression(expr: str, variables: dict[str, str]) -> str:
+    """计算答案模板赋值表达式的结果。
+    Args:
+        expr: 表达式字符串
+        variables: 模板变量字典
+    用法：
+    ```python
+    value = eval_answer_assign_expression("随机操作.从列表.msg", {"msg": "甲||乙"})
+    ```
+    """
     time_value = render_time_value(expr)
     if time_value is not None:
         return time_value
@@ -79,20 +113,62 @@ def eval_answer_assign_expression(expr: str, variables: dict[str, str]) -> str:
 class AssignTemplate:
     @staticmethod
     def parse(spec: str) -> tuple[str, str] | None:
+        """解析问题模板赋值规则。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        spec = AssignTemplate.parse("num=随机操作.取随机数.1.10")
+        ```
+        """
         return parse_question_assign_spec(spec)
 
     @staticmethod
     def parse_answer(spec: str) -> tuple[str, str] | None:
+        """解析答案模板赋值规则。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        spec = AssignTemplate.parse_answer("msg=时间.取时间戳_秒")
+        ```
+        """
         return parse_answer_assign_spec(spec)
 
     @staticmethod
     def eval(expr: str) -> str | None:
+        """计算不依赖事件的问题赋值表达式。
+        Args:
+            expr: 表达式字符串
+        用法：
+        ```python
+        value = AssignTemplate.eval("时间.取时间戳_秒")
+        ```
+        """
         return eval_question_assign_expression(expr)
 
     @staticmethod
     def eval_with_event(expr: str, event: Event | None = None) -> str | None:
+        """计算带事件上下文的问题赋值表达式。
+        Args:
+            expr: 表达式字符串
+            event: 当前事件对象
+        用法：
+        ```python
+        value = AssignTemplate.eval_with_event("at.user_id", event)
+        ```
+        """
         return eval_question_assign_expression(expr, event)
 
     @staticmethod
     def eval_answer(expr: str, variables: dict[str, str]) -> str:
+        """计算答案赋值表达式。
+        Args:
+            expr: 表达式字符串
+            variables: 模板变量字典
+        用法：
+        ```python
+        value = AssignTemplate.eval_answer("随机操作.从列表.msg", {"msg": "甲||乙"})
+        ```
+        """
         return eval_answer_assign_expression(expr, variables)

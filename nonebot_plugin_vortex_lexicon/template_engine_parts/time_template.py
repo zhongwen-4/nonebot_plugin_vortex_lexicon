@@ -12,6 +12,14 @@ _TEMPLATE_TOKEN_RE = re.compile(r"\[([^\[\]]+)\]")
 
 
 def parse_time_spec(name: str) -> tuple[str, str | None] | None:
+    """解析时间模板参数。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    spec = parse_time_spec("时间.格式化.%Y-%m-%d")
+    ```
+    """
     raw_name = name.strip()
     if not raw_name:
         return None
@@ -39,6 +47,14 @@ def parse_time_spec(name: str) -> tuple[str, str | None] | None:
 
 
 def parse_sleep_seconds(name: str) -> float | None:
+    """解析休眠模板秒数。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    seconds = parse_sleep_seconds("时间.休眠.2")
+    ```
+    """
     spec = parse_time_spec(name)
     if spec is None:
         return None
@@ -58,6 +74,14 @@ def parse_sleep_seconds(name: str) -> float | None:
 
 
 def split_time_actions(text: str) -> list[tuple[float, str]]:
+    """把带休眠模板的文本拆成发送片段。
+    Args:
+        text: 待处理文本
+    用法：
+    ```python
+    chunks = split_time_actions("前面[时间.休眠.2]后面")
+    ```
+    """
     if "[" not in text or "]" not in text:
         return [(0.0, text)] if text else []
 
@@ -89,6 +113,14 @@ def split_time_actions(text: str) -> list[tuple[float, str]]:
 
 
 async def apply_time_actions(text: str) -> str:
+    """按时间模板顺序执行文本片段。
+    Args:
+        text: 待处理文本
+    用法：
+    ```python
+    result = await apply_time_actions("前面[时间.休眠.2]后面")
+    ```
+    """
     if "[" not in text or "]" not in text:
         return text
 
@@ -101,6 +133,14 @@ async def apply_time_actions(text: str) -> str:
 
 
 def render_time_value(name: str) -> str | None:
+    """渲染当前时间模板结果。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    value = render_time_value("时间.取时间戳_秒")
+    ```
+    """
     spec = parse_time_spec(name)
     if spec is None:
         return None
@@ -126,16 +166,48 @@ def render_time_value(name: str) -> str | None:
 class TimeTemplate:
     @staticmethod
     def parse(spec: str) -> tuple[str, str | None] | None:
+        """解析时间模板。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        parsed = TimeTemplate.parse("时间.格式化.%Y-%m-%d")
+        ```
+        """
         return parse_time_spec(spec)
 
     @staticmethod
     async def apply_actions(text: str) -> str:
+        """执行带休眠的时间动作文本。
+        Args:
+            text: 待处理文本
+        用法：
+        ```python
+        result = await TimeTemplate.apply_actions("前面[时间.休眠.1]后面")
+        ```
+        """
         return await apply_time_actions(text)
 
     @staticmethod
     def split_actions(text: str) -> list[tuple[float, str]]:
+        """拆分时间动作片段。
+        Args:
+            text: 待处理文本
+        用法：
+        ```python
+        chunks = TimeTemplate.split_actions("前面[时间.休眠.1]后面")
+        ```
+        """
         return split_time_actions(text)
 
     @staticmethod
     def render(spec: str) -> str | None:
+        """渲染时间模板结果。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        value = TimeTemplate.render("时间.取时间戳_秒")
+        ```
+        """
         return render_time_value(spec)

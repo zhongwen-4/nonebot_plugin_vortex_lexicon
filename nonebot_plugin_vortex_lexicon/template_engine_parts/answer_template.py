@@ -7,6 +7,15 @@ from .time_template import render_time_value
 
 
 def render_answer_template(template: str, variables: dict[str, str]) -> str:
+    """渲染答案模板中的变量与模板表达式。
+    Args:
+        template: 模板字符串
+        variables: 模板变量字典
+    用法：
+    ```python
+    text = render_answer_template("你好[name]", {"name": "世界"})
+    ```
+    """
     def repl(match: re.Match[str]) -> str:
         name = match.group(1).strip()
         assign_spec = parse_answer_assign_spec(name)
@@ -35,4 +44,13 @@ def render_answer_template(template: str, variables: dict[str, str]) -> str:
 class AnswerTemplate:
     @staticmethod
     def render(template: str, variables: dict[str, str]) -> str:
+        """调用答案模板渲染入口。
+        Args:
+            template: 模板字符串
+            variables: 模板变量字典
+        用法：
+        ```python
+        text = AnswerTemplate.render("你好[name]", {"name": "世界"})
+        ```
+        """
         return render_answer_template(template, variables)

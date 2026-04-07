@@ -2,6 +2,14 @@ from nonebot.adapters import Event
 
 
 def is_group_message(event: Event) -> bool:
+    """判断事件是否来自群聊。
+    Args:
+        event: 当前事件对象
+    用法：
+    ```python
+    is_group = is_group_message(event)
+    ```
+    """
     data = getattr(event, "data", None)
     if data is None:
         return False
@@ -9,6 +17,14 @@ def is_group_message(event: Event) -> bool:
 
 
 def resolve_scope_group_id(event: Event) -> int:
+    """解析事件对应的作用域群号。
+    Args:
+        event: 当前事件对象
+    用法：
+    ```python
+    group_id = resolve_scope_group_id(event)
+    ```
+    """
     data = getattr(event, "data", None)
     if data is not None:
         message_scene = getattr(data, "message_scene", None)

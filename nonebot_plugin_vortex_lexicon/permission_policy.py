@@ -9,6 +9,14 @@ PERMISSION_ALLOWLIST_ADMIN = "allowlist_admin"
 
 
 def normalize_permission(raw: str | None) -> str:
+    """规范化权限字符串。
+    Args:
+        raw: 原始输入字符串
+    用法：
+    ```python
+    permission = normalize_permission("管理员")
+    ```
+    """
     value = (raw or "").strip().lower()
     if not value:
         return PERMISSION_ALL
@@ -25,13 +33,21 @@ def normalize_permission(raw: str | None) -> str:
         "超管": PERMISSION_SUPERUSER,
         "allowlist_admin": PERMISSION_ALLOWLIST_ADMIN,
         "allowlist": PERMISSION_ALLOWLIST_ADMIN,
-        "白名单管理": PERMISSION_ALLOWLIST_ADMIN,
+        "白名单管理员": PERMISSION_ALLOWLIST_ADMIN,
         "指定成员+管理员+群主+超管": PERMISSION_ALLOWLIST_ADMIN,
     }
     return aliases.get(value, PERMISSION_ALL)
 
 
 def normalize_allow_users(raw: str | None) -> str:
+    """规范化白名单成员列表。
+    Args:
+        raw: 原始输入字符串
+    用法：
+    ```python
+    allow_users = normalize_allow_users("123,456|789")
+    ```
+    """
     if not raw:
         return ""
     normalized = raw.replace("，", ",").replace("|", ",")
@@ -41,6 +57,14 @@ def normalize_allow_users(raw: str | None) -> str:
 
 
 def parse_allow_users(raw: str | None) -> set[int]:
+    """把白名单字符串解析为用户 ID 集合。
+    Args:
+        raw: 原始输入字符串
+    用法：
+    ```python
+    users = parse_allow_users("123|456")
+    ```
+    """
     if not raw:
         return set()
     normalized = raw.replace("，", ",").replace("|", ",")
@@ -49,11 +73,28 @@ def parse_allow_users(raw: str | None) -> set[int]:
 
 
 def get_superusers() -> set[int]:
+    """获取当前 NoneBot 配置中的超管集合。
+    Args:
+        无
+    
+    用法：
+    ```python
+    superusers = get_superusers()
+    ```
+    """
     values = getattr(get_driver().config, "superusers", set())
     return {int(item) for item in values if str(item).isdigit()}
 
 
 def resolve_group_role(event: Event) -> str | None:
+    """从事件中提取群成员身份。
+    Args:
+        event: 当前事件对象
+    用法：
+    ```python
+    role = resolve_group_role(event)
+    ```
+    """
     data = getattr(event, "data", None)
     member = getattr(data, "group_member", None) if data is not None else None
     role = getattr(member, "role", None)
@@ -61,6 +102,16 @@ def resolve_group_role(event: Event) -> str | None:
 
 
 def can_use_entry(event: Event, permission: str, allow_users: str) -> bool:
+    """判断当前事件发送者是否能触发词条。
+    Args:
+        event: 当前事件对象
+        permission: 权限标识字符串
+        allow_users: 白名单用户 ID 字符串
+    用法：
+    ```python
+    allowed = can_use_entry(event, "admin", "123|456")
+    ```
+    """
     try:
         user_id_str = event.get_user_id()
     except Exception:
@@ -92,4 +143,3 @@ def can_use_entry(event: Event, permission: str, allow_users: str) -> bool:
             return True
         return is_admin_or_owner
     return True
-

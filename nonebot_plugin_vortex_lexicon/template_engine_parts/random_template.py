@@ -11,6 +11,14 @@ from .constants import (
 
 
 def parse_random_spec(name: str) -> tuple[int | None, int | None, int] | None:
+    """解析随机数模板参数。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    spec = parse_random_spec("随机操作.取随机数.1.10")
+    ```
+    """
     raw_name = name.strip()
     if not raw_name:
         return None
@@ -50,6 +58,14 @@ def parse_random_spec(name: str) -> tuple[int | None, int | None, int] | None:
 
 
 def parse_random_choice_spec(name: str) -> str | None:
+    """解析随机取列表元素模板参数。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    target = parse_random_choice_spec("随机操作.从列表.msg")
+    ```
+    """
     raw_name = name.strip()
     if not raw_name:
         return None
@@ -69,6 +85,15 @@ def parse_random_choice_spec(name: str) -> str | None:
 
 
 def is_random_match(name: str, segment: str) -> bool:
+    """判断输入片段是否符合随机数模板范围。
+    Args:
+        name: 模板表达式
+        segment: 待匹配片段文本
+    用法：
+    ```python
+    matched = is_random_match("随机操作.取随机数.1.10", "5")
+    ```
+    """
     spec = parse_random_spec(name)
     if spec is None or _INT_RE.fullmatch(segment) is None:
         return False
@@ -83,6 +108,14 @@ def is_random_match(name: str, segment: str) -> bool:
 
 
 def render_random_number(name: str) -> str | None:
+    """渲染随机数模板。
+    Args:
+        name: 模板表达式
+    用法：
+    ```python
+    value = render_random_number("随机操作.取随机数.1.10")
+    ```
+    """
     spec = parse_random_spec(name)
     if spec is None:
         return None
@@ -98,6 +131,15 @@ def render_random_number(name: str) -> str | None:
 
 
 def render_random_choice(name: str, variables: dict[str, str]) -> str | None:
+    """从变量列表中随机取一个元素。
+    Args:
+        name: 模板表达式
+        variables: 模板变量字典
+    用法：
+    ```python
+    value = render_random_choice("随机操作.从列表.msg", {"msg": "甲||乙"})
+    ```
+    """
     target = parse_random_choice_spec(name)
     if target is None:
         return None
@@ -115,20 +157,62 @@ def render_random_choice(name: str, variables: dict[str, str]) -> str | None:
 class RandomTemplate:
     @staticmethod
     def parse_spec(spec: str) -> tuple[int | None, int | None, int] | None:
+        """解析随机数模板。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        parsed = RandomTemplate.parse_spec("随机操作.取随机数.1.10")
+        ```
+        """
         return parse_random_spec(spec)
 
     @staticmethod
     def parse_choice(spec: str) -> str | None:
+        """解析随机取列表模板。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        parsed = RandomTemplate.parse_choice("随机操作.从列表.msg")
+        ```
+        """
         return parse_random_choice_spec(spec)
 
     @staticmethod
     def match(spec: str, segment: str) -> bool:
+        """判断文本是否命中随机数模板。
+        Args:
+            spec: 模板表达式
+            segment: 待匹配片段文本
+        用法：
+        ```python
+        ok = RandomTemplate.match("随机操作.取随机数.1.10", "3")
+        ```
+        """
         return is_random_match(spec, segment)
 
     @staticmethod
     def render(spec: str) -> str | None:
+        """生成随机数结果。
+        Args:
+            spec: 模板表达式
+        用法：
+        ```python
+        value = RandomTemplate.render("随机操作.取随机数.1.10")
+        ```
+        """
         return render_random_number(spec)
 
     @staticmethod
     def render_choice(spec: str, variables: dict[str, str]) -> str | None:
+        """从变量列表中随机生成结果。
+        Args:
+            spec: 模板表达式
+            variables: 模板变量字典
+        用法：
+        ```python
+        value = RandomTemplate.render_choice("随机操作.从列表.msg", {"msg": "甲||乙"})
+        ```
+        """
         return render_random_choice(spec, variables)

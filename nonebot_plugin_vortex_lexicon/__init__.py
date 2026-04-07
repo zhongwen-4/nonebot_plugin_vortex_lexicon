@@ -2,6 +2,7 @@ import asyncio
 
 from nonebot import get_plugin_config, on_message, require
 from nonebot.adapters import Bot, Event
+from nonebot.typing import T_State
 
 require("nonebot_plugin_alconna")
 require("nonebot_plugin_orm")
@@ -14,7 +15,22 @@ from .lexicon_service import GLOBAL_GROUP_ID, LexiconService  # noqa: E402
 from .permission_policy import can_use_entry, normalize_allow_users, normalize_permission  # noqa: E402
 from .query_output import normalize_threshold, send_query_result  # noqa: E402
 from .scope import is_group_message, resolve_scope_group_id  # noqa: E402
-from .template_engine_parts import match_and_render, render_segment_field_template, run_api_action  # noqa: E402
+from .template_engine_parts import (  # noqa: E402
+    DEFAULT_AWAIT_PROMPT,
+    build_await_state,
+    clear_await_state,
+    event_to_text,
+    extract_await_templates,
+    is_await_expired,
+    load_await_state,
+    match_and_render,
+    next_await_step,
+    render_await_variables,
+    render_segment_field_template,
+    run_api_action,
+    save_await_state,
+    strip_await_templates,
+)
 from .template_engine_parts.time_template import split_time_actions  # noqa: E402
 
 plugin_config = get_plugin_config(Config)
@@ -261,12 +277,90 @@ async def global_query_handle(
     await lexion.finish()
 
 
+async def _send_rendered_chunks(event: Event, text: str, *, finish_last: bool) -> None:
+    chunks = split_time_actions(text)
+    if not chunks:
+        return
+
+    rendered_chunks: list[tuple[float, str]] = []
+    for delay, chunk in chunks:
+        rendered_chunk = render_segment_field_template(event, chunk)
+        if rendered_chunk:
+            rendered_chunks.append((delay, rendered_chunk))
+
+    if not rendered_chunks:
+        return
+
+    for idx, (delay, rendered_chunk) in enumerate(rendered_chunks):
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+        if finish_last and idx == len(rendered_chunks) - 1:
+            await lexion_matcher.finish(rendered_chunk)
+        else:
+            await lexion_matcher.send(rendered_chunk)
+
+
+async def _render_or_wait(
+    bot: Bot,
+    event: Event,
+    state: dict[str, object],
+    text: str,
+    variables: dict[str, str] | None = None,
+) -> None:
+    current_variables = dict(variables or {})
+    rendered_text = render_await_variables(text, current_variables)
+    remaining_text = await run_api_action(bot, event, rendered_text)
+    await_step = next_await_step(remaining_text, current_variables)
+
+    if await_step is None:
+        final_text = render_await_variables(remaining_text, current_variables)
+        await _send_rendered_chunks(event, final_text, finish_last=True)
+        return
+
+    if await_step.prefix:
+        await _send_rendered_chunks(event, await_step.prefix, finish_last=False)
+
+    save_await_state(
+        state,
+        build_await_state(
+            await_step.remaining,
+            await_step.variable,
+            await_step.timeout,
+            current_variables,
+        ),
+    )
+    await lexion_matcher.reject(DEFAULT_AWAIT_PROMPT)
+
+
 @lexion_matcher.handle()
 async def lexion_matcher_handle(
     bot: Bot,
     event: Event,
     session: async_scoped_session,
+    state: T_State,
 ):
+    pending_await = load_await_state(state)
+    if pending_await is not None:
+        clear_await_state(state)
+        if is_await_expired(pending_await):
+            await lexion_matcher.finish("等待输入已超时")
+
+        variable = pending_await.get("variable")
+        remaining_text = pending_await.get("remaining_text")
+        variables = pending_await.get("variables")
+        if not isinstance(variable, str) or not isinstance(remaining_text, str) or not isinstance(variables, dict):
+            await lexion_matcher.finish("等待状态已失效")
+
+        current_variables = {str(key): str(value) for key, value in variables.items()}
+        current_variables[variable] = event_to_text(event)
+        try:
+            await _render_or_wait(bot, event, state, remaining_text, current_variables)
+        except Exception as e:
+            clear_await_state(state)
+            await lexion_matcher.finish(f"API调用失败: {e}")
+        return
+
     text = event.get_plaintext().strip()
     if not text or text.startswith("词库"):
         return
@@ -279,34 +373,16 @@ async def lexion_matcher_handle(
         if not can_use_entry(event, entry.permission, entry.allow_users):
             continue
 
-        reply = match_and_render(entry.question, entry.answer, text, event)
+        await_prefix = extract_await_templates(entry.question)
+        question_template = strip_await_templates(entry.question) if await_prefix else entry.question
+        reply = match_and_render(question_template, entry.answer, text, event)
         if reply is None:
             continue
 
         try:
-            remaining_text = await run_api_action(bot, event, reply)
-            chunks = split_time_actions(remaining_text)
+            merged_text = f"{await_prefix}{reply}" if await_prefix else reply
+            await _render_or_wait(bot, event, state, merged_text)
         except Exception as e:
+            clear_await_state(state)
             await lexion_matcher.finish(f"API调用失败: {e}")
-
-        if not chunks:
-            return
-
-        rendered_chunks: list[tuple[float, str]] = []
-        for delay, chunk in chunks:
-            rendered_chunk = render_segment_field_template(event, chunk)
-            if rendered_chunk:
-                rendered_chunks.append((delay, rendered_chunk))
-
-        if not rendered_chunks:
-            return
-
-        for idx, (delay, rendered_chunk) in enumerate(rendered_chunks):
-            if delay > 0:
-                await asyncio.sleep(delay)
-
-            if idx == len(rendered_chunks) - 1:
-                await lexion_matcher.finish(rendered_chunk)
-            else:
-                await lexion_matcher.send(rendered_chunk)
         return
