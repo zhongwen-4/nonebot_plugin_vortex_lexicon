@@ -8,6 +8,10 @@ _OP_NOT = "NOT"
 _OP_XOR = "XOR"
 _OP_IN = "IN"
 _OP_NOT_IN = "NOT_IN"
+_OP_EQ = "EQ"
+_OP_NE = "NE"
+_OP_LE = "LE"
+_OP_GE = "GE"
 _OP_IF = "IF"
 _OP_ELSE = "ELSE"
 
@@ -18,6 +22,10 @@ _OP_ALIASES: dict[str, set[str]] = {
     _OP_XOR: {"xor", "异或"},
     _OP_IN: {"in", "包含", "contains"},
     _OP_NOT_IN: {"not in", "notin", "不包含"},
+    _OP_EQ: {"==", "eq", "equals", "等于"},
+    _OP_NE: {"!=", "ne", "not equals", "not equals to", "不等于"},
+    _OP_LE: {"<=", "le", "lte", "小于等于"},
+    _OP_GE: {">=", "ge", "gte", "大于等于"},
     _OP_IF: {"if", "如果"},
     _OP_ELSE: {"else", "否则"},
 }

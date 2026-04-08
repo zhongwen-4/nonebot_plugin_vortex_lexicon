@@ -7,8 +7,12 @@ from .constants import (
     _OP_ALIASES,
     _OP_AND,
     _OP_ELSE,
+    _OP_EQ,
+    _OP_GE,
     _OP_IF,
     _OP_IN,
+    _OP_LE,
+    _OP_NE,
     _OP_NOT,
     _OP_NOT_IN,
     _OP_OR,
@@ -77,8 +81,11 @@ def tokenize_logic_expression(template: str) -> tuple[tuple[str, str], ...]:
             tokens.append(("op", value))
             continue
 
-        if kind == "text_var" and buffer and all(part_kind == "text_var" for part_kind, _ in buffer):
-            flush_buffer()
+        if kind == "text_var" and buffer:
+            var_expr = value[1:-1].strip()
+            is_assign_var = "=" in var_expr
+            if all(part_kind == "text_var" for part_kind, _ in buffer) or is_assign_var:
+                flush_buffer()
 
         buffer.append((kind, value))
 
@@ -142,10 +149,29 @@ def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
 
     def parse_and() -> tuple | None:
         nonlocal idx
-        node = parse_membership()
+        node = parse_compare()
         if node is None:
             return None
         while idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] in {_OP_AND}:
+            op = tokens[idx][1]
+            idx += 1
+            right = parse_compare()
+            if right is None:
+                return None
+            node = (op, node, right)
+        return node
+
+    def parse_compare() -> tuple | None:
+        nonlocal idx
+        node = parse_membership()
+        if node is None:
+            return None
+        while idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] in {
+            _OP_EQ,
+            _OP_NE,
+            _OP_LE,
+            _OP_GE,
+        }:
             op = tokens[idx][1]
             idx += 1
             right = parse_membership()
@@ -197,6 +223,8 @@ def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
             condition = parse_or()
             if condition is None:
                 return None
+            if idx >= len(tokens):
+                return condition
             true_branch = parse_if_else()
             if true_branch is None:
                 return None
@@ -259,6 +287,8 @@ def _resolve_atom_text(
 ) -> tuple[str, dict[str, str]]:
     matched = match_atom_with_event(atom_template, text, event)
     if matched is None:
+        matched = match_atom_with_event(atom_template, "", event)
+    if matched is None:
         matched = contains_atom_with_event(atom_template, text, event)
     if matched is None:
         return atom_template, {}
@@ -290,6 +320,52 @@ def _eval_binary_in_logic(
 
     if contained:
         return dict(right_vars)
+    return None
+
+
+def _parse_number(text: str) -> float | None:
+    raw = text.strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _eval_binary_compare_logic(
+    op: str,
+    left: tuple,
+    right: tuple,
+    text: str,
+    event: Event | None = None,
+) -> dict[str, str] | None:
+    if left[0] != "ATOM" or right[0] != "ATOM":
+        return None
+
+    left_text, left_vars = _resolve_atom_text(left[1], text, event)
+    right_text, right_vars = _resolve_atom_text(right[1], text, event)
+
+    merged = merge_vars(left_vars, right_vars)
+    if merged is None:
+        return None
+
+    left_num = _parse_number(left_text)
+    right_num = _parse_number(right_text)
+
+    if op == _OP_EQ:
+        return merged if left_text == right_text else None
+    if op == _OP_NE:
+        return merged if left_text != right_text else None
+    if op == _OP_LE:
+        if left_num is not None and right_num is not None:
+            return merged if left_num <= right_num else None
+        return merged if left_text <= right_text else None
+    if op == _OP_GE:
+        if left_num is not None and right_num is not None:
+            return merged if left_num >= right_num else None
+        return merged if left_text >= right_text else None
+
     return None
 
 
@@ -348,6 +424,9 @@ def eval_logic(
         if matched is None:
             return {}
         return None
+
+    if op in {_OP_EQ, _OP_NE, _OP_LE, _OP_GE}:
+        return _eval_binary_compare_logic(op, node[1], node[2], text, event)
 
     if op == _OP_IF:
         condition = eval_logic(node[1], text, contains_fallback, event)
@@ -469,6 +548,15 @@ def eval_logic_output(
         if matched is None:
             return ""
         return None
+
+    if op in {_OP_EQ, _OP_NE, _OP_LE, _OP_GE}:
+        matched = _eval_binary_compare_logic(op, node[1], node[2], text, event)
+        if matched is None:
+            return None
+        merged = merge_vars(base_variables, matched)
+        if merged is None:
+            return None
+        return ""
 
     if op == _OP_IF:
         condition = eval_logic(node[1], text, contains_fallback, event)
