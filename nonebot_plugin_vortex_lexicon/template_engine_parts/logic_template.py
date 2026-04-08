@@ -48,35 +48,41 @@ def tokenize_logic_expression(template: str) -> tuple[tuple[str, str], ...]:
     for match in _VAR_TOKEN_RE.finditer(template):
         literal = template[cursor:match.start()]
         if literal:
-            raw_tokens.append(("text", literal))
+            raw_tokens.append(("text_lit", literal))
 
         name = match.group(1).strip()
         op = _normalize_op_name(name)
         if op is None:
-            raw_tokens.append(("text", match.group(0)))
+            raw_tokens.append(("text_var", match.group(0)))
         else:
             raw_tokens.append(("op", op))
         cursor = match.end()
 
     tail = template[cursor:]
     if tail:
-        raw_tokens.append(("text", tail))
+        raw_tokens.append(("text_lit", tail))
 
     tokens: list[tuple[str, str]] = []
-    buffer: list[str] = []
+    buffer: list[tuple[str, str]] = []
+
+    def flush_buffer() -> None:
+        atom = "".join(part for _, part in buffer).strip()
+        if atom:
+            tokens.append(("atom", atom))
+        buffer.clear()
+
     for kind, value in raw_tokens:
         if kind == "op":
-            atom = "".join(buffer).strip()
-            if atom:
-                tokens.append(("atom", atom))
-            buffer = []
+            flush_buffer()
             tokens.append(("op", value))
-        else:
-            buffer.append(value)
+            continue
 
-    atom = "".join(buffer).strip()
-    if atom:
-        tokens.append(("atom", atom))
+        if kind == "text_var" and buffer and all(part_kind == "text_var" for part_kind, _ in buffer):
+            flush_buffer()
+
+        buffer.append((kind, value))
+
+    flush_buffer()
 
     if not tokens:
         tokens.append(("atom", ""))
@@ -136,10 +142,24 @@ def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
 
     def parse_and() -> tuple | None:
         nonlocal idx
-        node = parse_unary()
+        node = parse_membership()
         if node is None:
             return None
         while idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] in {_OP_AND}:
+            op = tokens[idx][1]
+            idx += 1
+            right = parse_membership()
+            if right is None:
+                return None
+            node = (op, node, right)
+        return node
+
+    def parse_membership() -> tuple | None:
+        nonlocal idx
+        node = parse_unary()
+        if node is None:
+            return None
+        while idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] in {_OP_IN, _OP_NOT_IN}:
             op = tokens[idx][1]
             idx += 1
             right = parse_unary()
@@ -172,6 +192,22 @@ def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
 
     def parse_if_else() -> tuple | None:
         nonlocal idx
+        if idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] == _OP_IF:
+            idx += 1
+            condition = parse_or()
+            if condition is None:
+                return None
+            true_branch = parse_if_else()
+            if true_branch is None:
+                return None
+            if idx >= len(tokens) or tokens[idx][0] != "op" or tokens[idx][1] != _OP_ELSE:
+                return None
+            idx += 1
+            false_branch = parse_if_else()
+            if false_branch is None:
+                return None
+            return (_OP_IF, condition, true_branch, false_branch)
+
         condition = parse_or()
         if condition is None:
             return None
@@ -216,6 +252,47 @@ def _node_has_in_operator(node: tuple) -> bool:
     return False
 
 
+def _resolve_atom_text(
+    atom_template: str,
+    text: str,
+    event: Event | None = None,
+) -> tuple[str, dict[str, str]]:
+    matched = match_atom_with_event(atom_template, text, event)
+    if matched is None:
+        matched = contains_atom_with_event(atom_template, text, event)
+    if matched is None:
+        return atom_template, {}
+
+    matched_vars = {str(key): str(value) for key, value in matched.items()}
+    rendered = render_answer_template(atom_template, dict(matched_vars))
+    return rendered, matched_vars
+
+
+def _eval_binary_in_logic(
+    left: tuple,
+    right: tuple,
+    text: str,
+    event: Event | None = None,
+    *,
+    negate: bool = False,
+) -> dict[str, str] | None:
+    if left[0] != "ATOM" or right[0] != "ATOM":
+        return None
+
+    container, right_vars = _resolve_atom_text(right[1], text, event)
+    needle = render_answer_template(left[1], dict(right_vars))
+    contained = needle in container
+
+    if negate:
+        if contained:
+            return None
+        return dict(right_vars)
+
+    if contained:
+        return dict(right_vars)
+    return None
+
+
 def eval_logic(
     node: tuple,
     text: str,
@@ -236,6 +313,8 @@ def eval_logic(
     op = node[0]
     if op == "ATOM":
         matched = match_atom_with_event(node[1], text, event)
+        if matched is None:
+            matched = match_atom_with_event(node[1], "", event)
         if matched is not None:
             return matched
         if contains_fallback:
@@ -249,12 +328,16 @@ def eval_logic(
         return None
 
     if op == _OP_IN:
+        if len(node) == 3:
+            return _eval_binary_in_logic(node[1], node[2], text, event)
         child = node[1]
         if child[0] == "ATOM":
             return contains_atom_with_event(child[1], text, event)
         return eval_logic(child, text, True, event)
 
     if op == _OP_NOT_IN:
+        if len(node) == 3:
+            return _eval_binary_in_logic(node[1], node[2], text, event, negate=True)
         child = node[1]
         if child[0] == "ATOM":
             contained = contains_atom_with_event(child[1], text, event)
@@ -330,6 +413,8 @@ def eval_logic_output(
     if op == "ATOM":
         atom_template = node[1]
         matched = match_atom_with_event(atom_template, text, event)
+        if matched is None:
+            matched = match_atom_with_event(atom_template, "", event)
         if matched is None and contains_fallback:
             matched = contains_atom_with_event(atom_template, text, event)
         if matched is None:
@@ -346,6 +431,14 @@ def eval_logic_output(
         return None
 
     if op == _OP_IN:
+        if len(node) == 3:
+            matched = _eval_binary_in_logic(node[1], node[2], text, event)
+            if matched is None:
+                return None
+            merged = merge_vars(base_variables, matched)
+            if merged is None:
+                return None
+            return ""
         child = node[1]
         if child[0] == "ATOM":
             matched = contains_atom_with_event(child[1], text, event)
@@ -358,6 +451,14 @@ def eval_logic_output(
         return eval_logic_output(child, text, base_variables, True, event)
 
     if op == _OP_NOT_IN:
+        if len(node) == 3:
+            matched = _eval_binary_in_logic(node[1], node[2], text, event, negate=True)
+            if matched is None:
+                return None
+            merged = merge_vars(base_variables, matched)
+            if merged is None:
+                return None
+            return ""
         child = node[1]
         if child[0] == "ATOM":
             matched = contains_atom_with_event(child[1], text, event)

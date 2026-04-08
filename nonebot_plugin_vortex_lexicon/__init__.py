@@ -362,12 +362,12 @@ async def lexion_matcher_handle(
     session: async_scoped_session,
     state: T_State,
 ):
+    if _is_self_message(bot, event):
+        logger.debug("词库 matcher 忽略机器人自身消息，避免自触发循环")
+        return
+
     pending_await = load_await_state(state)
     if pending_await is not None:
-        if _is_self_message(bot, event):
-            logger.debug("词库 await 忽略机器人自身消息，继续等待用户输入")
-            await lexion_matcher.reject()
-
         clear_await_state(state)
         if is_await_expired(pending_await):
             await lexion_matcher.finish("等待输入已超时")
