@@ -3,6 +3,7 @@ from nonebot.adapters import Event
 
 from .assign_template import eval_question_assign_expression, parse_question_assign_spec
 from .constants import _LEGACY_RANDOM_EXPR_RE, _VAR_TOKEN_RE
+from .event_field_template import parse_event_match_expression, eval_event_match_expression
 from .random_template import is_random_match, parse_random_spec
 
 _DEPRECATED_RANDOM_NAMES = ("random", "rand", "随机")
@@ -69,6 +70,8 @@ def compile_question_template(template: str) -> tuple[tuple[str, str], ...]:
                 if assign_spec is not None:
                     var_name, expr = assign_spec
                     tokens.append(("assign", f"{var_name}={expr}"))
+                elif parse_event_match_expression(name) is not None:
+                    tokens.append(("event", name))
                 elif parse_random_spec(name) is not None:
                     tokens.append(("rand", name))
                 else:
@@ -175,6 +178,14 @@ def _match_template(
                     return matched
             return None
 
+        if kind == "event":
+            if event is None:
+                return None
+            matched = eval_event_match_expression(event, value)
+            if matched is not True:
+                return None
+            return dfs(idx + 1, pos, variables)
+
         if kind == "assign":
             assign_spec = parse_question_assign_spec(value)
             if assign_spec is None:
@@ -245,7 +256,12 @@ def match_atom_with_event(atom_template: str, text: str, event: Event | None = N
     ```
     """
     tokens = compile_question_template(atom_template)
-    return _match_template(tokens, text, event)
+    matched = _match_template(tokens, text, event)
+    if matched is not None:
+        return matched
+    if text:
+        return _match_template(tokens, "", event)
+    return None
 
 
 def contains_atom(atom_template: str, text: str) -> dict[str, str] | None:

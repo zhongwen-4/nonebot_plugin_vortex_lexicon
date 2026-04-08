@@ -1,5 +1,9 @@
 from nonebot.adapters import Event
 
+from .event_field_template import (
+    eval_event_field_expression,
+    parse_event_field_expression,
+)
 from .segment_field_template import (
     eval_segment_field_expression,
     parse_segment_field_expression,
@@ -78,6 +82,12 @@ def eval_question_assign_expression(expr: str, event: Event | None = None) -> st
         if event is None:
             return None
         return eval_segment_field_expression(event, expr)
+
+    event_spec = parse_event_field_expression(expr)
+    if event_spec is not None:
+        if event is None:
+            return None
+        return eval_event_field_expression(event, expr)
 
     return expr
 

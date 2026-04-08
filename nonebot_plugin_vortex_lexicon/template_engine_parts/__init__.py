@@ -22,6 +22,13 @@ from .assign_template import (
     parse_answer_assign_spec,
     parse_question_assign_spec,
 )
+from .event_field_template import (
+    EventFieldTemplate,
+    eval_event_field_expression,
+    eval_event_match_expression,
+    parse_event_field_expression,
+    parse_event_match_expression,
+)
 from .engine import TemplateLogicEngine, match_and_render
 from .logic_template import (
     LogicTemplate,
@@ -58,6 +65,7 @@ __all__ = [
     "AwaitTemplate",
     "DEFAULT_AWAIT_PROMPT",
     "AssignTemplate",
+    "EventFieldTemplate",
     "LogicTemplate",
     "QuestionTemplate",
     "RandomTemplate",
@@ -69,6 +77,8 @@ __all__ = [
     "contains_await_templates",
     "contains_atom",
     "event_to_text",
+    "eval_event_field_expression",
+    "eval_event_match_expression",
     "eval_segment_field_expression",
     "eval_answer_assign_expression",
     "eval_logic",
@@ -85,6 +95,8 @@ __all__ = [
     "parse_api_action",
     "parse_answer_assign_spec",
     "parse_logic_expression",
+    "parse_event_field_expression",
+    "parse_event_match_expression",
     "parse_question_assign_spec",
     "parse_random_choice_spec",
     "parse_random_spec",
