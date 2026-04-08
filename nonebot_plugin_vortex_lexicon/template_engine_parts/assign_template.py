@@ -1,5 +1,3 @@
-from typing import Any
-
 from nonebot.adapters import Event
 
 from .segment_field_template import (
@@ -9,11 +7,10 @@ from .segment_field_template import (
 from .constants import _ASSIGN_VAR_RE
 from .random_template import (
     parse_random_choice_spec,
-    parse_random_spec,
     render_random_choice,
     render_random_number,
 )
-from .time_template import parse_time_spec, render_time_value
+from .time_template import render_time_value
 
 
 def parse_question_assign_spec(name: str) -> tuple[str, str] | None:
@@ -32,11 +29,7 @@ def parse_question_assign_spec(name: str) -> tuple[str, str] | None:
     expr = right.strip()
     if not var_name or not expr:
         return None
-    if (
-        parse_random_spec(expr) is None
-        and parse_time_spec(expr) is None
-        and parse_segment_field_expression(expr) is None
-    ):
+    if _ASSIGN_VAR_RE.fullmatch(var_name) is None:
         return None
     return var_name, expr
 
@@ -80,9 +73,13 @@ def eval_question_assign_expression(expr: str, event: Event | None = None) -> st
     if time_value is not None:
         return time_value
 
-    if event is not None:
+    segment_spec = parse_segment_field_expression(expr)
+    if segment_spec is not None:
+        if event is None:
+            return None
         return eval_segment_field_expression(event, expr)
-    return None
+
+    return expr
 
 
 def eval_answer_assign_expression(expr: str, variables: dict[str, str]) -> str:
