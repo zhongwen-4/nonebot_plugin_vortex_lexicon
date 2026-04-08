@@ -8,6 +8,8 @@ _OP_NOT = "NOT"
 _OP_XOR = "XOR"
 _OP_IN = "IN"
 _OP_NOT_IN = "NOT_IN"
+_OP_IF = "IF"
+_OP_ELSE = "ELSE"
 
 _OP_ALIASES: dict[str, set[str]] = {
     _OP_OR: {"or", "或者", "或", "||"},
@@ -16,6 +18,8 @@ _OP_ALIASES: dict[str, set[str]] = {
     _OP_XOR: {"xor", "异或"},
     _OP_IN: {"in", "包含", "contains"},
     _OP_NOT_IN: {"not in", "notin", "不包含"},
+    _OP_IF: {"if", "如果"},
+    _OP_ELSE: {"else", "否则"},
 }
 
 _RANDOM_NAME_ALIASES = {"随机操作"}

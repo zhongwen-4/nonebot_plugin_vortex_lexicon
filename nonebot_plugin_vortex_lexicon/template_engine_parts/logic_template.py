@@ -6,6 +6,8 @@ from .answer_template import render_answer_template
 from .constants import (
     _OP_ALIASES,
     _OP_AND,
+    _OP_ELSE,
+    _OP_IF,
     _OP_IN,
     _OP_NOT,
     _OP_NOT_IN,
@@ -168,7 +170,28 @@ def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
         idx += 1
         return ("ATOM", value)
 
-    root = parse_or()
+    def parse_if_else() -> tuple | None:
+        nonlocal idx
+        condition = parse_or()
+        if condition is None:
+            return None
+
+        if idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] == _OP_IF:
+            idx += 1
+            true_branch = parse_if_else()
+            if true_branch is None:
+                return None
+            if idx >= len(tokens) or tokens[idx][0] != "op" or tokens[idx][1] != _OP_ELSE:
+                return None
+            idx += 1
+            false_branch = parse_if_else()
+            if false_branch is None:
+                return None
+            return (_OP_IF, condition, true_branch, false_branch)
+
+        return condition
+
+    root = parse_if_else()
     if root is None or idx != len(tokens):
         return None
     return root
@@ -180,6 +203,12 @@ def _node_has_in_operator(node: tuple) -> bool:
         return True
     if op == "ATOM":
         return False
+    if op == _OP_IF:
+        return (
+            _node_has_in_operator(node[1])
+            or _node_has_in_operator(node[2])
+            or _node_has_in_operator(node[3])
+        )
     if op in {_OP_NOT}:
         return _node_has_in_operator(node[1])
     if len(node) >= 3:
@@ -236,6 +265,15 @@ def eval_logic(
         if matched is None:
             return {}
         return None
+
+    if op == _OP_IF:
+        condition = eval_logic(node[1], text, contains_fallback, event)
+        if condition is not None:
+            true_result = eval_logic(node[2], text, contains_fallback, event)
+            if true_result is None:
+                return None
+            return merge_vars(condition, true_result)
+        return eval_logic(node[3], text, contains_fallback, event)
 
     left_has_in = _node_has_in_operator(node[1])
     right_has_in = _node_has_in_operator(node[2])
@@ -330,6 +368,15 @@ def eval_logic_output(
         if matched is None:
             return ""
         return None
+
+    if op == _OP_IF:
+        condition = eval_logic(node[1], text, contains_fallback, event)
+        if condition is not None:
+            merged_base = merge_vars(base_variables, condition)
+            if merged_base is None:
+                return None
+            return eval_logic_output(node[2], text, merged_base, contains_fallback, event)
+        return eval_logic_output(node[3], text, base_variables, contains_fallback, event)
 
     left_has_in = _node_has_in_operator(node[1])
     right_has_in = _node_has_in_operator(node[2])

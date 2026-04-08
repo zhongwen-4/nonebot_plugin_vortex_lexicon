@@ -1,7 +1,9 @@
-import asyncio
+﻿import asyncio
 
 from nonebot import get_plugin_config, on_message, require
 from nonebot.adapters import Bot, Event
+from nonebot.exception import MatcherException
+from nonebot.log import logger
 from nonebot.typing import T_State
 
 require("nonebot_plugin_alconna")
@@ -301,6 +303,19 @@ async def _send_rendered_chunks(event: Event, text: str, *, finish_last: bool) -
             await lexion_matcher.send(rendered_chunk)
 
 
+def _is_self_message(bot: Bot, event: Event) -> bool:
+    try:
+        user_id = event.get_user_id()
+    except Exception:
+        user_id = ""
+    if user_id and str(user_id) == str(bot.self_id):
+        return True
+
+    data = getattr(event, "data", None)
+    sender_id = getattr(data, "sender_id", None) if data is not None else None
+    return sender_id is not None and str(sender_id) == str(bot.self_id)
+
+
 async def _render_or_wait(
     bot: Bot,
     event: Event,
@@ -312,9 +327,13 @@ async def _render_or_wait(
     rendered_text = render_await_variables(text, current_variables)
     remaining_text = await run_api_action(bot, event, rendered_text)
     await_step = next_await_step(remaining_text, current_variables)
+    logger.debug(
+        f"词库 await 渲染阶段: rendered_text={rendered_text!r}, remaining_text={remaining_text!r}, has_next={await_step is not None}"
+    )
 
     if await_step is None:
         final_text = render_await_variables(remaining_text, current_variables)
+        logger.debug(f"词库 await 最终输出: final_text={final_text!r}")
         await _send_rendered_chunks(event, final_text, finish_last=True)
         return
 
@@ -330,6 +349,9 @@ async def _render_or_wait(
             current_variables,
         ),
     )
+    logger.debug(
+        f"词库 await 等待输入: variable={await_step.variable}, timeout={await_step.timeout}, remaining={await_step.remaining!r}"
+    )
     await lexion_matcher.reject(DEFAULT_AWAIT_PROMPT)
 
 
@@ -342,6 +364,10 @@ async def lexion_matcher_handle(
 ):
     pending_await = load_await_state(state)
     if pending_await is not None:
+        if _is_self_message(bot, event):
+            logger.debug("词库 await 忽略机器人自身消息，继续等待用户输入")
+            await lexion_matcher.reject()
+
         clear_await_state(state)
         if is_await_expired(pending_await):
             await lexion_matcher.finish("等待输入已超时")
@@ -353,9 +379,13 @@ async def lexion_matcher_handle(
             await lexion_matcher.finish("等待状态已失效")
 
         current_variables = {str(key): str(value) for key, value in variables.items()}
-        current_variables[variable] = event_to_text(event)
+        input_text = event_to_text(event)
+        current_variables[variable] = input_text
+        logger.debug(f"词库 await 收到输入: variable={variable}, text={input_text!r}")
         try:
             await _render_or_wait(bot, event, state, remaining_text, current_variables)
+        except MatcherException:
+            raise
         except Exception as e:
             clear_await_state(state)
             await lexion_matcher.finish(f"API调用失败: {e}")
@@ -382,6 +412,8 @@ async def lexion_matcher_handle(
         try:
             merged_text = f"{await_prefix}{reply}" if await_prefix else reply
             await _render_or_wait(bot, event, state, merged_text)
+        except MatcherException:
+            raise
         except Exception as e:
             clear_await_state(state)
             await lexion_matcher.finish(f"API调用失败: {e}")
