@@ -1,7 +1,7 @@
 from nonebot.adapters import Event
 
 from .event_field_template import (
-    eval_event_field_expression,
+    eval_event_field_value,
     parse_event_field_expression,
 )
 from .segment_field_template import (
@@ -59,7 +59,7 @@ def parse_answer_assign_spec(name: str) -> tuple[str, str] | None:
     return var_name, expr
 
 
-def eval_question_assign_expression(expr: str, event: Event | None = None) -> str | None:
+def eval_question_assign_expression(expr: str, event: Event | None = None) -> object | None:
     """计算问题模板赋值表达式的结果。
     Args:
         expr: 表达式字符串
@@ -87,7 +87,7 @@ def eval_question_assign_expression(expr: str, event: Event | None = None) -> st
     if event_spec is not None:
         if event is None:
             return None
-        return eval_event_field_expression(event, expr)
+        return eval_event_field_value(event, event_spec)
 
     return expr
 
@@ -143,7 +143,7 @@ class AssignTemplate:
         return parse_answer_assign_spec(spec)
 
     @staticmethod
-    def eval(expr: str) -> str | None:
+    def eval(expr: str) -> object | None:
         """计算不依赖事件的问题赋值表达式。
         Args:
             expr: 表达式字符串
@@ -155,7 +155,7 @@ class AssignTemplate:
         return eval_question_assign_expression(expr)
 
     @staticmethod
-    def eval_with_event(expr: str, event: Event | None = None) -> str | None:
+    def eval_with_event(expr: str, event: Event | None = None) -> object | None:
         """计算带事件上下文的问题赋值表达式。
         Args:
             expr: 表达式字符串

@@ -1,12 +1,7 @@
-﻿import asyncio
-
-import re
-
 from nonebot import get_plugin_config, on_message, on_notice, on_request, require
 from nonebot.adapters import Bot, Event
 from nonebot.exception import MatcherException
 from nonebot.log import logger
-from nonebot.matcher import Matcher
 from nonebot.typing import T_State
 
 require("nonebot_plugin_alconna")
@@ -19,24 +14,17 @@ from .config import Config  # noqa: E402
 from .lexicon_service import GLOBAL_GROUP_ID, LexiconService  # noqa: E402
 from .permission_policy import can_use_entry, normalize_allow_users, normalize_permission  # noqa: E402
 from .query_output import normalize_threshold, send_query_result  # noqa: E402
+from .runtime_helpers import handle_non_message_event, is_self_message, render_or_wait  # noqa: E402
 from .scope import is_group_message, resolve_scope_group_id  # noqa: E402
 from .template_engine_parts import (  # noqa: E402
-    DEFAULT_AWAIT_PROMPT,
-    build_await_state,
     clear_await_state,
     event_to_text,
     extract_await_templates,
     is_await_expired,
     load_await_state,
     match_and_render,
-    next_await_step,
-    render_await_variables,
-    render_segment_field_template,
-    run_api_action,
-    save_await_state,
     strip_await_templates,
 )
-from .template_engine_parts.time_template import split_time_actions  # noqa: E402
 
 plugin_config = get_plugin_config(Config)
 
@@ -62,8 +50,6 @@ lexion = on_alconna(alc)
 lexion_matcher = on_message(priority=20, block=False)
 lexion_notice_matcher = on_notice(priority=20, block=False)
 lexion_request_matcher = on_request(priority=20, block=False)
-
-_EVENT_RULE_RE = re.compile(r"\[\s*event\.", re.IGNORECASE)
 
 
 @lexion.assign("分群.添加")
@@ -286,99 +272,6 @@ async def global_query_handle(
     await lexion.finish()
 
 
-async def _send_rendered_chunks(
-    matcher: type[Matcher],
-    event: Event,
-    text: str,
-    *,
-    finish_last: bool,
-) -> None:
-    chunks = split_time_actions(text)
-    if not chunks:
-        return
-
-    rendered_chunks: list[tuple[float, str]] = []
-    for delay, chunk in chunks:
-        rendered_chunk = render_segment_field_template(event, chunk)
-        if rendered_chunk:
-            rendered_chunks.append((delay, rendered_chunk))
-
-    if not rendered_chunks:
-        return
-
-    for idx, (delay, rendered_chunk) in enumerate(rendered_chunks):
-        if delay > 0:
-            await asyncio.sleep(delay)
-
-        if finish_last and idx == len(rendered_chunks) - 1:
-            await matcher.finish(rendered_chunk)
-        else:
-            await matcher.send(rendered_chunk)
-
-
-def _is_self_message(bot: Bot, event: Event) -> bool:
-    try:
-        user_id = event.get_user_id()
-    except Exception:
-        user_id = ""
-    if user_id and str(user_id) == str(bot.self_id):
-        return True
-
-    data = getattr(event, "data", None)
-    sender_id = getattr(data, "sender_id", None) if data is not None else None
-    return sender_id is not None and str(sender_id) == str(bot.self_id)
-
-
-async def _render_or_wait(
-    matcher: type[Matcher],
-    bot: Bot,
-    event: Event,
-    state: dict[str, object],
-    text: str,
-    variables: dict[str, str] | None = None,
-    *,
-    allow_await: bool = True,
-) -> None:
-    current_variables = dict(variables or {})
-
-    if not allow_await:
-        rendered_text = render_await_variables(strip_await_templates(text), current_variables)
-        remaining_text = await run_api_action(bot, event, rendered_text)
-        final_text = render_await_variables(strip_await_templates(remaining_text), current_variables)
-        await _send_rendered_chunks(matcher, event, final_text, finish_last=True)
-        return
-
-    rendered_text = render_await_variables(text, current_variables)
-    remaining_text = await run_api_action(bot, event, rendered_text)
-    await_step = next_await_step(remaining_text, current_variables)
-    logger.debug(
-        f"词库 await 渲染阶段: rendered_text={rendered_text!r}, remaining_text={remaining_text!r}, has_next={await_step is not None}"
-    )
-
-    if await_step is None:
-        final_text = render_await_variables(remaining_text, current_variables)
-        logger.debug(f"词库 await 最终输出: final_text={final_text!r}")
-        await _send_rendered_chunks(matcher, event, final_text, finish_last=True)
-        return
-
-    if await_step.prefix:
-        await _send_rendered_chunks(matcher, event, await_step.prefix, finish_last=False)
-
-    save_await_state(
-        state,
-        build_await_state(
-            await_step.remaining,
-            await_step.variable,
-            await_step.timeout,
-            current_variables,
-        ),
-    )
-    logger.debug(
-        f"词库 await 等待输入: variable={await_step.variable}, timeout={await_step.timeout}, remaining={await_step.remaining!r}"
-    )
-    await matcher.reject(DEFAULT_AWAIT_PROMPT)
-
-
 @lexion_matcher.handle()
 async def lexion_matcher_handle(
     bot: Bot,
@@ -386,7 +279,7 @@ async def lexion_matcher_handle(
     session: async_scoped_session,
     state: T_State,
 ):
-    if _is_self_message(bot, event):
+    if is_self_message(bot, event):
         logger.debug("词库 matcher 忽略机器人自身消息，避免自触发循环")
         return
 
@@ -407,7 +300,7 @@ async def lexion_matcher_handle(
         current_variables[variable] = input_text
         logger.debug(f"词库 await 收到输入: variable={variable}, text={input_text!r}")
         try:
-            await _render_or_wait(lexion_matcher, bot, event, state, remaining_text, current_variables)
+            await render_or_wait(lexion_matcher, bot, event, state, remaining_text, current_variables)
         except MatcherException:
             raise
         except Exception as e:
@@ -435,51 +328,12 @@ async def lexion_matcher_handle(
 
         try:
             merged_text = f"{await_prefix}{reply}" if await_prefix else reply
-            await _render_or_wait(lexion_matcher, bot, event, state, merged_text)
+            await render_or_wait(lexion_matcher, bot, event, state, merged_text)
         except MatcherException:
             raise
         except Exception as e:
             clear_await_state(state)
             await lexion_matcher.finish(f"API调用失败: {e}")
-        return
-
-
-def _is_event_rule(question: str) -> bool:
-    return _EVENT_RULE_RE.search(question) is not None
-
-
-async def _handle_non_message_event(
-    matcher: type[Matcher],
-    bot: Bot,
-    event: Event,
-    session: async_scoped_session,
-    state: T_State,
-) -> None:
-    group_id = resolve_scope_group_id(event)
-    service = LexiconService(session)
-    entries = await service.list_for_message(group_id)
-    text = event_to_text(event).strip()
-
-    for entry in entries:
-        if not _is_event_rule(entry.question):
-            continue
-        if not can_use_entry(event, entry.permission, entry.allow_users):
-            continue
-
-        await_prefix = extract_await_templates(entry.question)
-        question_template = strip_await_templates(entry.question) if await_prefix else entry.question
-        reply = match_and_render(question_template, entry.answer, text, event)
-        if reply is None:
-            continue
-
-        try:
-            merged_text = f"{await_prefix}{reply}" if await_prefix else reply
-            await _render_or_wait(matcher, bot, event, state, merged_text, allow_await=False)
-        except MatcherException:
-            raise
-        except Exception as e:
-            clear_await_state(state)
-            await matcher.finish(f"API调用失败: {e}")
         return
 
 
@@ -490,7 +344,7 @@ async def lexion_notice_matcher_handle(
     session: async_scoped_session,
     state: T_State,
 ):
-    await _handle_non_message_event(lexion_notice_matcher, bot, event, session, state)
+    await handle_non_message_event(lexion_notice_matcher, bot, event, session, state)
 
 
 @lexion_request_matcher.handle()
@@ -500,4 +354,4 @@ async def lexion_request_matcher_handle(
     session: async_scoped_session,
     state: T_State,
 ):
-    await _handle_non_message_event(lexion_request_matcher, bot, event, session, state)
+    await handle_non_message_event(lexion_request_matcher, bot, event, session, state)

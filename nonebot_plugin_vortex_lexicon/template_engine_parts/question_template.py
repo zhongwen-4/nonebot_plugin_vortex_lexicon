@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 from nonebot.adapters import Event
 
@@ -147,6 +148,61 @@ def _ordered_candidate_ends(
     return sorted(natural, reverse=True) + sorted(other, reverse=True)
 
 
+def _to_plain_dict(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return {str(k): v for k, v in value.items()}
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump(mode="json")
+        if isinstance(dumped, dict):
+            return {str(k): v for k, v in dumped.items()}
+
+    to_dict = getattr(value, "dict", None)
+    if callable(to_dict):
+        dumped = to_dict()
+        if isinstance(dumped, dict):
+            return {str(k): v for k, v in dumped.items()}
+    return None
+
+
+def _stringify_assigned_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    dumped = _to_plain_dict(value)
+    if dumped is not None:
+        try:
+            return json.dumps(dumped, ensure_ascii=False)
+        except TypeError:
+            return str(dumped)
+    if isinstance(value, list):
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except TypeError:
+            return str(value)
+    return str(value)
+
+
+def _flatten_assigned_object(prefix: str, value: object, out: dict[str, str]) -> None:
+    data = _to_plain_dict(value)
+    if data is None:
+        return
+    for key, item in data.items():
+        key_name = f"{prefix}.{key}"
+        out[key_name] = _stringify_assigned_value(item)
+        _flatten_assigned_object(key_name, item, out)
+
+
+def _expand_assigned_values(var_name: str, assigned: object) -> dict[str, str]:
+    expanded = {var_name: _stringify_assigned_value(assigned)}
+    _flatten_assigned_object(var_name, assigned, expanded)
+    return expanded
+
+
 def _match_template(
     tokens: tuple[tuple[str, str], ...],
     text: str,
@@ -191,17 +247,29 @@ def _match_template(
             if assign_spec is None:
                 return None
             var_name, expr = assign_spec
-            if var_name in variables:
-                return dfs(idx + 1, pos, variables)
 
             assigned = eval_question_assign_expression(expr, event)
             if assigned is None:
                 return None
-            variables[var_name] = assigned
+
+            assigned_variables = _expand_assigned_values(var_name, assigned)
+            inserted_keys: list[str] = []
+            for key, value_text in assigned_variables.items():
+                existed = variables.get(key)
+                if existed is not None:
+                    if existed != value_text:
+                        for inserted in inserted_keys:
+                            variables.pop(inserted, None)
+                        return None
+                    continue
+                variables[key] = value_text
+                inserted_keys.append(key)
+
             matched = dfs(idx + 1, pos, variables)
             if matched is not None:
                 return matched
-            variables.pop(var_name, None)
+            for key in inserted_keys:
+                variables.pop(key, None)
             return None
 
         name = value
