@@ -71,12 +71,20 @@ def compile_question_template(template: str) -> tuple[tuple[str, str], ...]:
                 if assign_spec is not None:
                     var_name, expr = assign_spec
                     tokens.append(("assign", f"{var_name}={expr}"))
-                elif parse_event_match_expression(name) is not None:
-                    tokens.append(("event", name))
-                elif parse_random_spec(name) is not None:
-                    tokens.append(("rand", name))
                 else:
-                    tokens.append(("var", name))
+                    event_spec = parse_event_match_expression(name)
+                    if event_spec is not None:
+                        _, op, _ = event_spec
+                        if op is None:
+                            tokens.append(("event", name))
+                        else:
+                            # 事件比较必须走逻辑表达式，例如：
+                            # [event.event_type][==]message_recall
+                            tokens.append(("lit", match.group(0)))
+                    elif parse_random_spec(name) is not None:
+                        tokens.append(("rand", name))
+                    else:
+                        tokens.append(("var", name))
 
         cursor = match.end()
 

@@ -4,7 +4,6 @@ from typing import Any
 
 from nonebot.adapters import Bot, Event
 
-_API_BLOCK_RE = re.compile(r"^\[(?P<spec>[^\[\]]+)\](?P<tail>.*)$", re.DOTALL)
 _INT_RE = re.compile(r"^-?\d+$")
 _KV_SPLIT_RE = re.compile(r"\.(?=[A-Za-z_]\w*=)")
 _GET_EXPR_RE = re.compile(r"\.get\((?P<fields>[^()]*)\)\s*$")
@@ -43,6 +42,24 @@ _CONST_ALIASES = {
 }
 _TRUE_VALUES.update({"true", "yes", "on", "y", "是", "对", "真", "开启", "开"})
 _FALSE_VALUES.update({"false", "no", "off", "n", "否", "不", "假", "关闭", "关"})
+
+
+def _split_leading_bracket_block(text: str) -> tuple[str, str] | None:
+    """拆分字符串起始处的方括号块，支持块内嵌套方括号。"""
+    if not text or text[0] != "[":
+        return None
+
+    depth = 0
+    for idx, ch in enumerate(text):
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return text[1:idx], text[idx + 1 :]
+            if depth < 0:
+                return None
+    return None
 
 
 def _coerce_value(raw: str) -> Any:
@@ -85,11 +102,12 @@ def parse_api_action(
     parsed = parse_api_action("[api.get_group_member_info.group_id=123.user_id=456]")
     ```
     """
-    matched = _API_BLOCK_RE.match(answer_text)
-    if matched is None:
+    split_result = _split_leading_bracket_block(answer_text)
+    if split_result is None:
         return None
 
-    spec = matched.group("spec").strip()
+    raw_spec_block, tail = split_result
+    spec = raw_spec_block.strip()
     if not spec:
         return None
 
@@ -133,7 +151,6 @@ def parse_api_action(
             continue
         kwargs[key] = _coerce_value(value)
 
-    tail = matched.group("tail")
     return api_name, kwargs, get_fields, tail
 
 
@@ -334,7 +351,13 @@ def _extract_context_values(event: Event) -> dict[str, Any]:
 def _resolve_const_value(raw: Any, context: dict[str, Any]) -> Any:
     if not isinstance(raw, str):
         return raw
-    key = _CONST_ALIASES.get(raw.strip().lower())
+
+    text = raw.strip()
+    key = _CONST_ALIASES.get(text.lower())
+    if key is None and len(text) >= 2 and text[0] == "[" and text[-1] == "]":
+        inner = text[1:-1].strip().lower()
+        key = _CONST_ALIASES.get(inner)
+
     if key is None:
         return raw
     value = context.get(key)

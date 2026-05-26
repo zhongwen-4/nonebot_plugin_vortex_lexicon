@@ -236,24 +236,8 @@ def parse_logic_expression(tokens: tuple[tuple[str, str], ...]) -> tuple | None:
                 return None
             return (_OP_IF, condition, true_branch, false_branch)
 
-        condition = parse_or()
-        if condition is None:
-            return None
-
-        if idx < len(tokens) and tokens[idx][0] == "op" and tokens[idx][1] == _OP_IF:
-            idx += 1
-            true_branch = parse_if_else()
-            if true_branch is None:
-                return None
-            if idx >= len(tokens) or tokens[idx][0] != "op" or tokens[idx][1] != _OP_ELSE:
-                return None
-            idx += 1
-            false_branch = parse_if_else()
-            if false_branch is None:
-                return None
-            return (_OP_IF, condition, true_branch, false_branch)
-
-        return condition
+        # 不再支持中缀分支语法：A [if] B [else] C
+        return parse_or()
 
     root = parse_if_else()
     if root is None or idx != len(tokens):

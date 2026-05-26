@@ -8,6 +8,18 @@ from .random_template import RandomTemplate
 from .time_template import TimeTemplate
 
 
+def _ast_has_if(node: tuple) -> bool:
+    op = node[0]
+    if op == "IF":
+        return True
+    if op == "ATOM":
+        return False
+    for child in node[1:]:
+        if isinstance(child, tuple) and _ast_has_if(child):
+            return True
+    return False
+
+
 class TemplateLogicEngine:
     def __init__(self) -> None:
         """初始化模板逻辑引擎。
@@ -45,6 +57,9 @@ class TemplateLogicEngine:
         logic_tokens = self.logic_template.tokenize(question_tmpl)
         logic_ast = self.logic_template.parse(logic_tokens)
         if logic_ast is not None:
+            # 约束：question 侧使用逻辑表达式做判断时，必须显式带 [if]
+            if self.logic_template.has_ops(logic_tokens) and not _ast_has_if(logic_ast):
+                return None
             return self.logic_template.eval_question(logic_ast, text, event)
         return self.question_template.match_with_event(question_tmpl, text, event)
 

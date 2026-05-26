@@ -131,7 +131,16 @@ def eval_event_field_value(event: Event, field_path: str) -> Any:
     builtin = _event_builtin_value(event, field_path)
     if builtin is not None:
         return builtin
-    return _extract_field(event, field_path)
+
+    value = _extract_field(event, field_path)
+    if value is not None:
+        return value
+
+    # 兼容简写：event.xxx 自动回退到 event.data.xxx
+    # 例如 event.peer_id -> event.data.peer_id
+    if not field_path.startswith("data."):
+        return _extract_field(event, f"data.{field_path}")
+    return None
 
 
 def parse_event_match_expression(expr: str) -> tuple[str, str | None, str | None] | None:
